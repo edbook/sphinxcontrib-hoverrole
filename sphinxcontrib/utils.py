@@ -13,7 +13,7 @@ from jinja2 import (
     select_autoescape,
 )
 
-SEARCH_URL = "https://www.stae.is/os/leita/{}"
+SEARCH_URL = "https://idord.arnastofnun.is/leit/{}/ordabok/{}"
 
 jinja2_env = Environment(loader=PackageLoader("sphinxcontrib.hoverrole","hoverrole/templates"), autoescape=select_autoescape())
 
@@ -29,41 +29,25 @@ def configure_logger(name):
     return logger
 
 
-def get_first_term(terms: Union[list, str]) -> str:
-    if terms and isinstance(terms, list):
-        return terms[0]
-    return terms
-
-
 def serialize(items: list) -> str:
     if items and isinstance(items, list):
         return ", ".join(items)
     return items
 
 
-def urlify(item: str, split_char: str = "_") -> str:
-    term = get_first_term(item).replace(" ", split_char)
-    return SEARCH_URL.format(term)
-
-
 def get_html(
-    tpl: str, word: str, terms: list, html_link: bool = False, stae_index: bool = None
+    tpl: str, word: str, term: str, terms: list, ordabok: str, html_link: bool = False, stae_index: bool = None
 ) -> str:
-    if stae_index == None:
-        term: str = serialize(terms)
-        url: Optional[str] = urlify(terms) if html_link else None
-    else:
-        term: str = terms[stae_index]
-        url: Optional[str] = SEARCH_URL.format(term) if html_link else None
+    url: Optional[str] = SEARCH_URL.format(term, ordabok) if html_link else None
     template = jinja2_env.get_template(tpl)
-    return template.render(word=word, term=term, url=url)
+    return template.render(word=word, term=terms, url=url)
 
 
 def get_latex(latexIt: bool, latexLink: bool, word: str, term: str) -> str:
     if latexIt:
         return f"\\textit{{{word}}}"
     if latexLink:
-        url = urlify(term, "\_")
+        url = SEARCH_URL.format(term, ordabok)
         return f"\\href{{{url}}}{{{word}}}"
     return word
 

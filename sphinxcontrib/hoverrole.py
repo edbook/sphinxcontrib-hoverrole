@@ -58,21 +58,27 @@ def hover_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
     latexLink = app.config.hover_latexLinkToStae
     latexIt = app.config.hover_latexItText
     translationList = app.config.hover_translationList
+    ordabok = app.config.hover_ordabok
 
     # for text input of the form: "word,term"
     split_text = text.split(",")
+    split_text = [part.lstrip() for part in split_text]
     stae_index = None
-    if len(split_text) == 3:
-        word, term, stae_index = split_text
+    if len(split_text) == 4:
+        word, term, ordabok, stae_index = split_text
         stae_index = int(stae_index) - 1  # indexum frá 1 en ekki 0
-        term = term.lstrip()
+    elif len(split_text) == 3:
+        word, term, variable = split_text
+        if variable.isdigit():
+            stae_index = int(variable) - 1  # indexum frá 1 en ekki 0
+        else:
+            ordabok = variable
     elif len(split_text) == 2:
         word, term = split_text
-        term = term.lstrip()
     else:
         word = term = text
 
-    node = make_hover_node(word, term, transNum, htmlLink, latexLink, latexIt, stae_index)
+    node = make_hover_node(word, term, transNum, htmlLink, latexLink, latexIt, stae_index, ordabok)
     # Save the translated term to file for later use in hoverlist.
     if translationList:
         save_to_listfile(get_translations_file(), node)
@@ -106,32 +112,40 @@ def save_to_listfile(filename: str, node: hover):
     return
 
 
-def make_hover_node(word, term, transNum, htmlLink, latexLink, latexIt, stae_index):
+def make_hover_node(word, term, transNum, htmlLink, latexLink, latexIt, stae_index, ordabok):
     # Create new hover object.
     hover_node = hover()
     hover_node["word"] = word
     hover_node["term"] = term
 
     # Get translation and citation form of term.
-    dictentry = dictlookup.lookup(term)
+    dictentry = dictlookup.lookup(term, ordabok)
     try:
         translation = dictentry["enTerm"]
+        try:
+            if stae_index is not None:
+                translation = [translation[stae_index]]
+        except IndexError:
+            logger.warning(
+                "stae_index %s out of range for term '%s' (has %d translations)",
+                stae_index + 1, term, len(translation)
+            )
         hover_node["translation"] = translation
         hover_node["citationform"] = dictentry["isTerm"]
 
     # If translation was not found create error message and code snippets.
-    except KeyError:
-        hover_node["htmlcode"] = get_html("not_found.html", word, term,)
+    except (KeyError, IndexError):
+        hover_node["htmlcode"] = get_html("not_found.html", word, term, '', ordabok)
         hover_node["latexcode"] = get_latex(latexIt, latexLink, word, term)
         return hover_node
 
-    if stae_index == None:
+    if stae_index is None:
         hover_node["translation"] = serialize(translation)
-        hover_node["htmlcode"] = get_html("translation.html", word, translation, htmlLink)
+        hover_node["htmlcode"] = get_html("translation.html", word, term, translation, ordabok, htmlLink)
     else:
-        hover_node["translation"] = translation[stae_index]
+        hover_node["translation"] = translation
         hover_node["htmlcode"] = get_html(
-            "translation.html", word, translation, htmlLink, stae_index
+            "translation.html", word, term, translation, ordabok, htmlLink, stae_index
         )
     hover_node["latexcode"] = get_latex(latexIt, latexLink, word, translation)
 
@@ -175,6 +189,8 @@ def create_hoverlist(app, doctree, fromdocname):
     # Add words and translations (sorted) to nodes.
     for key, value in sorted(words.items()):
         wordnode = nodes.emphasis(key, key)
+        if isinstance(value, list):
+            value = ", ".join(value)
         translationstring = " : " + value
 
         # Add linebreak if smaller version of list is used.
@@ -232,6 +248,7 @@ def setup(app):
     app.add_config_value("hover_latexLinkToStae", 0, "env")
     # Should the text e italicized in latex output. '1' for on, '0' for off.
     app.add_config_value("hover_latexItText", 1, "env")
+    app.add_config_value("hover_ordabok", "EDLISFR", '')
 
     # Should a list of translations e created (default '1')
     app.add_config_value("hover_translationList", 1, "env")
